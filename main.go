@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sort"
 	"strings"
 )
@@ -23,7 +24,7 @@ const (
 )
 
 var filterFlag = flag.Bool("filter", false, "filter source dictionaries")
-var dictFlag = flag.String("dict", "huge.txt", "dictionary to use")
+var dictFlag = flag.String("dict", "small.txt", "dictionary to use")
 
 func main() {
 	flag.Parse()
@@ -34,7 +35,10 @@ func main() {
 
 	if flag.NArg() != 0 {
 		lookup(flag.Args())
+		return
 	}
+
+	evaluate()
 }
 
 func filter() {
@@ -107,6 +111,140 @@ func lookup(args []string) {
 		if i+1 < flag.NArg() {
 			fmt.Println(strings.Repeat("=", 20))
 		}
+	}
+}
+
+type Record struct {
+	Index int
+	Word  string
+	Score int64
+}
+
+func evaluate() {
+	words := readLines(filepath.Join(filteredDir, *dictFlag))
+
+	inputs := make(chan Record, 64)
+	outputs := make(chan Record, 64)
+
+	go func() {
+		for i, word := range words {
+			inputs <- Record{
+				Index: i,
+				Word:  word,
+			}
+		}
+		close(inputs)
+	}()
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go func() {
+			cache := make(map[Hints]int64)
+			for record := range inputs {
+				for _, target := range words {
+					hints := calculateHints(target, record.Word)
+					if count, ok := cache[hints]; ok {
+						record.Score += count
+						continue
+					}
+					var count int64
+					for _, word := range words {
+						if matchesHints(word, hints) {
+							count++
+						}
+					}
+					record.Score += count
+					cache[hints] = count
+				}
+				outputs <- record
+			}
+		}()
+	}
+
+	records := make([]Record, len(words))
+	for i := range records {
+		record := <-outputs
+		records[record.Index] = record
+		fmt.Println(i+1, "/", len(words))
+	}
+
+	sort.SliceStable(records, func(i, j int) bool {
+		return records[i].Score < records[j].Score
+	})
+
+	for i := 0; i < len(records) && i < 20; i++ {
+		record := records[i]
+		fmt.Printf("%s %.3f%%\n", record.Word, float64(100*record.Score)/float64(len(words)*len(words)))
+	}
+}
+
+func calculateHints(target, word string) Hints {
+	base := []byte(word)
+	for i := range base {
+		if base[i] != target[i] {
+			base[i] = '_'
+		}
+	}
+
+	var good []byte
+	for i := range word {
+		exists := false
+		for j := range good {
+			if good[j] == word[i] {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			continue
+		}
+		for j := range base {
+			if base[j] == word[i] {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			continue
+		}
+		for j := range target {
+			if target[j] == word[i] {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			good = append(good, word[i])
+		}
+	}
+
+	var bad []byte
+	for i := range word {
+		exists := false
+		for j := range bad {
+			if bad[j] == word[i] {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			continue
+		}
+		for j := range target {
+			if target[j] == word[i] {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			continue
+		}
+		bad = append(bad, word[i])
+	}
+
+	return Hints{
+		Base: string(base),
+		Good: string(good),
+		Bad:  string(bad),
 	}
 }
 
