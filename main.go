@@ -25,6 +25,8 @@ const (
 
 var filterFlag = flag.Bool("filter", false, "filter source dictionaries")
 var dictFlag = flag.String("dict", "small.txt", "dictionary to use")
+var distFlag = flag.String("dist", "", "calculate distribution for one word")
+var evalFlag = flag.Bool("eval", false, "find best starting word")
 
 func main() {
 	flag.Parse()
@@ -33,12 +35,19 @@ func main() {
 		filter()
 	}
 
-	if flag.NArg() != 0 {
-		lookup(flag.Args())
+	if *distFlag != "" {
+		distribution(*distFlag)
 		return
 	}
 
-	evaluate()
+	if *evalFlag {
+		evaluate()
+		return
+	}
+
+	if flag.NArg() != 0 {
+		lookup(flag.Args())
+	}
 }
 
 func filter() {
@@ -111,6 +120,68 @@ func lookup(args []string) {
 		if i+1 < flag.NArg() {
 			fmt.Println(strings.Repeat("=", 20))
 		}
+	}
+}
+
+func distribution(word string) {
+	words := readLines(filepath.Join(filteredDir, *dictFlag))
+	cache := make(map[Hints]int64)
+	dist := make(map[int64]int64)
+	for _, target := range words {
+		hints := calculateHints(target, word)
+		if count, ok := cache[hints]; ok {
+			dist[count]++
+			continue
+		}
+		var count int64
+		for _, word := range words {
+			if matchesHints(word, hints) {
+				count++
+			}
+		}
+		dist[count]++
+		cache[hints] = count
+	}
+
+	keys := make([]int64, 0, len(dist))
+	for key := range dist {
+		keys = append(keys, key)
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i] < keys[j]
+	})
+
+	const numBuckets = 10
+
+	key := keys[len(keys)-1]
+	bucketSize, increment := int64(1), int64(1)
+	for key >= numBuckets*bucketSize {
+		bucketSize += increment
+		if (bucketSize/increment)%10 == 0 {
+			increment *= 10
+		}
+	}
+
+	buckets := make([]int64, numBuckets)
+	for key, count := range dist {
+		index := key / bucketSize
+		buckets[index] += count
+	}
+
+	var maxCount int64
+	for _, count := range buckets {
+		if count > maxCount {
+			maxCount = count
+		}
+	}
+
+	formatLength := len(fmt.Sprintf("%d ", (numBuckets-1)*bucketSize))
+	graphLength := int64(100 - formatLength)
+	bucketScale := (maxCount + graphLength - 1) / graphLength
+
+	for i, count := range buckets {
+		barLength := int(count / bucketScale)
+		fmt.Printf("%*d %s\n", formatLength-1, int64(i)*bucketSize, strings.Repeat("*", barLength))
 	}
 }
 
