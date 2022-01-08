@@ -11,6 +11,36 @@ import (
 	"strings"
 )
 
+const (
+	ABSENT  = 0
+	PRESENT = 1
+	CORRECT = 2
+)
+
+func assess(target, guess string) []int {
+	results := make([]int, len(target))
+	used := make([]bool, len(target))
+	for i := range results {
+		if guess[i] == target[i] {
+			results[i] = CORRECT
+			used[i] = true
+		}
+	}
+	for i, current := range results {
+		if current == CORRECT {
+			continue
+		}
+		for j := range target {
+			if !used[j] && guess[i] == target[j] {
+				results[i] = PRESENT
+				used[j] = true
+				break
+			}
+		}
+	}
+	return results
+}
+
 type Hints struct {
 	Fixed  []Hint
 	Moving []Hint
@@ -36,6 +66,98 @@ func (hints *Hints) key() string {
 	key = append(key, '-')
 	key = append(key, hints.Bad...)
 	return string(key)
+}
+
+func calculateHints(target, word string) (hints Hints) {
+	correct := make([]bool, len(target))
+	used := make([]bool, len(target))
+
+	for i := range target {
+		if word[i] == target[i] {
+			correct[i] = true
+			used[i] = true
+			hints.Fixed = append(hints.Fixed, Hint{
+				Letter: word[i],
+				Index:  byte(i),
+			})
+		}
+	}
+
+	for i := range target {
+		if correct[i] {
+			continue
+		}
+		for j := range target {
+			if !used[j] && word[i] == target[j] {
+				used[j] = true
+				hints.Moving = append(hints.Moving, Hint{
+					Letter: word[i],
+					Index:  byte(i),
+				})
+				break
+			}
+		}
+	}
+
+	var bad []byte
+	for i := range word {
+		exists := false
+		for _, h := range hints.Fixed {
+			if word[i] == h.Letter {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			continue
+		}
+		for _, h := range hints.Moving {
+			if word[i] == h.Letter {
+				exists = true
+				break
+			}
+		}
+		if exists {
+			continue
+		}
+		bad = append(bad, word[i])
+	}
+	hints.Bad = string(bad)
+	return
+}
+
+func matchesHints(word string, hints Hints) bool {
+	for _, h := range hints.Fixed {
+		if word[h.Index] != h.Letter {
+			return false
+		}
+	}
+
+	for _, h := range hints.Moving {
+		if word[h.Index] == h.Letter {
+			return false
+		}
+		found := false
+		for j := 0; j < len(word); j++ {
+			if word[j] == h.Letter {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	for i := 0; i < len(hints.Bad); i++ {
+		for j := 0; j < len(word); j++ {
+			if word[j] == hints.Bad[i] {
+				return false
+			}
+		}
+	}
+
+	return true
 }
 
 var distFlag = flag.String("dist", "", "calculate distribution for one word")
@@ -226,108 +348,6 @@ func evaluate() {
 		record := records[i]
 		fmt.Printf("%s %.3f%%\n", record.Word, float64(100*record.Score)/float64(len(words)*len(words)))
 	}
-}
-
-func calculateHints(target, word string) Hints {
-	var fixed []Hint
-	for i := range target {
-		if word[i] == target[i] {
-			fixed = append(fixed, Hint{
-				Letter: word[i],
-				Index:  byte(i),
-			})
-		}
-	}
-
-	var moving []Hint
-	for i := range word {
-		exists := false
-		for _, p := range fixed {
-			if p.Letter == word[i] {
-				exists = true
-				break
-			}
-		}
-		if exists {
-			continue
-		}
-		for j := range target {
-			if target[j] == word[i] {
-				exists = true
-				break
-			}
-		}
-		if exists {
-			moving = append(moving, Hint{
-				Letter: word[i],
-				Index:  byte(i),
-			})
-		}
-	}
-
-	var bad []byte
-	for i := range word {
-		exists := false
-		for j := range bad {
-			if bad[j] == word[i] {
-				exists = true
-				break
-			}
-		}
-		if exists {
-			continue
-		}
-		for j := range target {
-			if target[j] == word[i] {
-				exists = true
-				break
-			}
-		}
-		if exists {
-			continue
-		}
-		bad = append(bad, word[i])
-	}
-
-	return Hints{
-		Fixed:  fixed,
-		Moving: moving,
-		Bad:    string(bad),
-	}
-}
-
-func matchesHints(word string, hints Hints) bool {
-	for _, p := range hints.Fixed {
-		if word[p.Index] != p.Letter {
-			return false
-		}
-	}
-
-	for _, p := range hints.Moving {
-		if word[p.Index] == p.Letter {
-			return false
-		}
-		found := false
-		for j := 0; j < len(word); j++ {
-			if word[j] == p.Letter {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return false
-		}
-	}
-
-	for i := 0; i < len(hints.Bad); i++ {
-		for j := 0; j < len(word); j++ {
-			if word[j] == hints.Bad[i] {
-				return false
-			}
-		}
-	}
-
-	return true
 }
 
 func loadDict() []string {
