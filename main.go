@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"path/filepath"
 	"regexp"
 	"runtime"
 	"sort"
@@ -39,22 +38,11 @@ func (hints *Hints) key() string {
 	return string(key)
 }
 
-const (
-	sourceDir   = "dicts"
-	filteredDir = "filtered"
-)
-
-var filterFlag = flag.Bool("filter", false, "filter source dictionaries")
-var dictFlag = flag.String("dict", "small.txt", "dictionary to use")
 var distFlag = flag.String("dist", "", "calculate distribution for one word")
 var evalFlag = flag.Bool("eval", false, "find best starting word")
 
 func main() {
 	flag.Parse()
-
-	if *filterFlag {
-		filter()
-	}
 
 	if *distFlag != "" {
 		distribution(*distFlag)
@@ -68,50 +56,6 @@ func main() {
 
 	if flag.NArg() != 0 {
 		lookup(flag.Args())
-	}
-}
-
-func filter() {
-	regex := regexp.MustCompile(`^[A-Za-z]{5}$`)
-
-	entries, err := os.ReadDir(sourceDir)
-	check(err)
-
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-
-		name := entry.Name()
-		words := readLines(filepath.Join(sourceDir, name))
-
-		// Strip header.
-		for i, word := range words {
-			if word == "---" {
-				words = words[i+1:]
-				break
-			}
-		}
-
-		// Find five-letter words, convert to uppercase and remove duplicates.
-		filtered := make(map[string]bool)
-		for _, word := range words {
-			if regex.MatchString(word) {
-				word = strings.ToUpper(word)
-				filtered[word] = true
-			}
-		}
-
-		words = words[:0]
-		for word, _ := range filtered {
-			words = append(words, word)
-		}
-
-		sort.Strings(words)
-
-		fmt.Printf("%10s %6d\n", name, len(words))
-
-		writeLines(filepath.Join(filteredDir, name), words)
 	}
 }
 
@@ -387,9 +331,7 @@ func matchesHints(word string, hints Hints) bool {
 }
 
 func loadDict() []string {
-	// Here we assume that the file is well-formed and each line
-	// contains one word consisting of five uppercase letters.
-	return readLines(filepath.Join(filteredDir, *dictFlag))
+	return small
 }
 
 func readLines(filename string) []string {
