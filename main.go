@@ -13,9 +13,30 @@ import (
 )
 
 type Hints struct {
-	Base string
-	Good string
-	Bad  string
+	Fixed  []Hint
+	Moving []Hint
+	Bad    string
+}
+
+type Hint struct {
+	Letter byte
+	Index  byte
+}
+
+func (hints *Hints) key() string {
+	key := make([]byte, 0, 2*len(hints.Fixed)+1+2*len(hints.Moving)+1+len(hints.Bad))
+	for _, h := range hints.Fixed {
+		key = append(key, h.Letter)
+		key = append(key, h.Index)
+	}
+	key = append(key, '+')
+	for _, h := range hints.Moving {
+		key = append(key, h.Letter)
+		key = append(key, h.Index)
+	}
+	key = append(key, '-')
+	key = append(key, hints.Bad...)
+	return string(key)
 }
 
 const (
@@ -72,7 +93,7 @@ func filter() {
 			}
 		}
 
-		// Find five-character words, convert to upper case and remove duplicates.
+		// Find five-letter words, convert to uppercase and remove duplicates.
 		filtered := make(map[string]bool)
 		for _, word := range words {
 			if regex.MatchString(word) {
@@ -96,7 +117,7 @@ func filter() {
 
 func lookup(args []string) {
 	words := loadDict()
-	argRegex := regexp.MustCompile(`^([_A-Za-z]{5})(?:\+([A-Za-z]+))?(?:-([A-Za-z]+))?$`)
+	argRegex := regexp.MustCompile(`^([_A-Za-z]{5})(?:\+((?:[A-Za-z][1-5])+))?(?:-([A-Za-z]+))?$`)
 
 	for i, arg := range args {
 		matches := argRegex.FindStringSubmatch(arg)
@@ -105,11 +126,24 @@ func lookup(args []string) {
 			continue
 		}
 
-		hints := Hints{
-			Base: strings.ToUpper(matches[1]),
-			Good: strings.ToUpper(matches[2]),
-			Bad:  strings.ToUpper(matches[3]),
+		var hints Hints
+		fixed := strings.ToUpper(matches[1])
+		for i := range fixed {
+			if fixed[i] != '_' {
+				hints.Fixed = append(hints.Fixed, Hint{
+					Letter: fixed[i],
+					Index:  byte(i),
+				})
+			}
 		}
+		moving := strings.ToUpper(matches[2])
+		for i := 0; i < len(moving); i += 2 {
+			hints.Moving = append(hints.Moving, Hint{
+				Letter: moving[i],
+				Index:  moving[i+1] - '1',
+			})
+		}
+		hints.Bad = strings.ToUpper(matches[3])
 
 		for _, word := range words {
 			if matchesHints(word, hints) {
@@ -125,11 +159,12 @@ func lookup(args []string) {
 
 func distribution(word string) {
 	words := loadDict()
-	cache := make(map[Hints]int64)
+	cache := make(map[string]int64)
 	dist := make(map[int64]int64)
 	for _, target := range words {
 		hints := calculateHints(target, word)
-		if count, ok := cache[hints]; ok {
+		key := hints.key()
+		if count, ok := cache[key]; ok {
 			dist[count]++
 			continue
 		}
@@ -140,7 +175,7 @@ func distribution(word string) {
 			}
 		}
 		dist[count]++
-		cache[hints] = count
+		cache[key] = count
 	}
 
 	keys := make([]int64, 0, len(dist))
@@ -209,11 +244,12 @@ func evaluate() {
 
 	for i := 0; i < runtime.NumCPU(); i++ {
 		go func() {
-			cache := make(map[Hints]int64)
+			cache := make(map[string]int64)
 			for record := range inputs {
 				for _, target := range words {
 					hints := calculateHints(target, record.Word)
-					if count, ok := cache[hints]; ok {
+					key := hints.key()
+					if count, ok := cache[key]; ok {
 						record.Score += count
 						continue
 					}
@@ -224,7 +260,7 @@ func evaluate() {
 						}
 					}
 					record.Score += count
-					cache[hints] = count
+					cache[key] = count
 				}
 				outputs <- record
 			}
@@ -249,27 +285,21 @@ func evaluate() {
 }
 
 func calculateHints(target, word string) Hints {
-	base := []byte(word)
-	for i := range base {
-		if base[i] != target[i] {
-			base[i] = '_'
+	var fixed []Hint
+	for i := range target {
+		if word[i] == target[i] {
+			fixed = append(fixed, Hint{
+				Letter: word[i],
+				Index:  byte(i),
+			})
 		}
 	}
 
-	var good []byte
+	var moving []Hint
 	for i := range word {
 		exists := false
-		for j := range good {
-			if good[j] == word[i] {
-				exists = true
-				break
-			}
-		}
-		if exists {
-			continue
-		}
-		for j := range base {
-			if base[j] == word[i] {
+		for _, p := range fixed {
+			if p.Letter == word[i] {
 				exists = true
 				break
 			}
@@ -284,7 +314,10 @@ func calculateHints(target, word string) Hints {
 			}
 		}
 		if exists {
-			good = append(good, word[i])
+			moving = append(moving, Hint{
+				Letter: word[i],
+				Index:  byte(i),
+			})
 		}
 	}
 
@@ -313,27 +346,26 @@ func calculateHints(target, word string) Hints {
 	}
 
 	return Hints{
-		Base: string(base),
-		Good: string(good),
-		Bad:  string(bad),
+		Fixed:  fixed,
+		Moving: moving,
+		Bad:    string(bad),
 	}
 }
 
 func matchesHints(word string, hints Hints) bool {
-	if len(word) != len(hints.Base) {
-		return false
-	}
-
-	for i := 0; i < len(hints.Base); i++ {
-		if hints.Base[i] != '_' && word[i] != hints.Base[i] {
+	for _, p := range hints.Fixed {
+		if word[p.Index] != p.Letter {
 			return false
 		}
 	}
 
-	for i := 0; i < len(hints.Good); i++ {
+	for _, p := range hints.Moving {
+		if word[p.Index] == p.Letter {
+			return false
+		}
 		found := false
 		for j := 0; j < len(word); j++ {
-			if word[j] == hints.Good[i] {
+			if word[j] == p.Letter {
 				found = true
 				break
 			}
