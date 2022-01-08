@@ -160,6 +160,31 @@ func matchesHints(word string, hints Hints) bool {
 	return true
 }
 
+type Counter struct {
+	cache map[string]int64
+}
+
+func MakeCounter() Counter {
+	return Counter{
+		cache: make(map[string]int64),
+	}
+}
+
+func (counter *Counter) CountMatches(hints Hints) int64 {
+	key := hints.key()
+	if count, ok := counter.cache[key]; ok {
+		return count
+	}
+	var count int64
+	for _, word := range small {
+		if matchesHints(word, hints) {
+			count++
+		}
+	}
+	counter.cache[key] = count
+	return count
+}
+
 var distFlag = flag.String("dist", "", "calculate distribution for one word")
 var evalFlag = flag.Bool("eval", false, "find best starting word")
 
@@ -182,7 +207,7 @@ func main() {
 }
 
 func lookup(args []string) {
-	words := loadDict()
+	words := small
 	argRegex := regexp.MustCompile(`^([_A-Za-z]{5})(?:\+((?:[A-Za-z][1-5])+))?(?:-([A-Za-z]+))?$`)
 
 	for i, arg := range args {
@@ -224,24 +249,13 @@ func lookup(args []string) {
 }
 
 func distribution(word string) {
-	words := loadDict()
-	cache := make(map[string]int64)
 	dist := make(map[int64]int64)
-	for _, target := range words {
+
+	counter := MakeCounter()
+	for _, target := range small {
 		hints := calculateHints(target, word)
-		key := hints.key()
-		if count, ok := cache[key]; ok {
-			dist[count]++
-			continue
-		}
-		var count int64
-		for _, word := range words {
-			if matchesHints(word, hints) {
-				count++
-			}
-		}
+		count := counter.CountMatches(hints)
 		dist[count]++
-		cache[key] = count
 	}
 
 	keys := make([]int64, 0, len(dist))
@@ -293,13 +307,11 @@ type Record struct {
 }
 
 func evaluate() {
-	words := loadDict()
-
 	inputs := make(chan Record, 64)
 	outputs := make(chan Record, 64)
 
 	go func() {
-		for i, word := range words {
+		for i, word := range big {
 			inputs <- Record{
 				Index: i,
 				Word:  word,
@@ -310,34 +322,23 @@ func evaluate() {
 
 	for i := 0; i < runtime.NumCPU(); i++ {
 		go func() {
-			cache := make(map[string]int64)
+			counter := MakeCounter()
 			for record := range inputs {
-				for _, target := range words {
+				for _, target := range small {
 					hints := calculateHints(target, record.Word)
-					key := hints.key()
-					if count, ok := cache[key]; ok {
-						record.Score += count
-						continue
-					}
-					var count int64
-					for _, word := range words {
-						if matchesHints(word, hints) {
-							count++
-						}
-					}
+					count := counter.CountMatches(hints)
 					record.Score += count
-					cache[key] = count
 				}
 				outputs <- record
 			}
 		}()
 	}
 
-	records := make([]Record, len(words))
+	records := make([]Record, len(big))
 	for i := range records {
 		record := <-outputs
 		records[record.Index] = record
-		fmt.Println(i+1, "/", len(words))
+		fmt.Println(i+1, "/", len(big))
 	}
 
 	sort.SliceStable(records, func(i, j int) bool {
@@ -346,12 +347,8 @@ func evaluate() {
 
 	for i := 0; i < len(records) && i < 20; i++ {
 		record := records[i]
-		fmt.Printf("%s %.3f%%\n", record.Word, float64(100*record.Score)/float64(len(words)*len(words)))
+		fmt.Printf("%s %.3f%%\n", record.Word, float64(100*record.Score)/float64(len(small)*len(small)))
 	}
-}
-
-func loadDict() []string {
-	return small
 }
 
 func readLines(filename string) []string {
