@@ -17,6 +17,8 @@ const (
 	CORRECT = 2
 )
 
+// Evaluation function extracted from Wordle JavaScript.
+// Not used right now, for reference only.
 func assess(target, guess string) []int {
 	results := make([]int, len(target))
 	used := make([]bool, len(target))
@@ -52,6 +54,7 @@ type Hint struct {
 	Index  byte
 }
 
+// Calculates a reprentation that can be used as a map key.
 func (hints *Hints) key() string {
 	key := make([]byte, 0, 2*len(hints.Fixed)+1+2*len(hints.Moving)+1+len(hints.Bad))
 	for _, h := range hints.Fixed {
@@ -207,7 +210,6 @@ func main() {
 }
 
 func lookup(args []string) {
-	words := small
 	argRegex := regexp.MustCompile(`^([_A-Za-z]{5})(?:\+((?:[A-Za-z][1-5])+))?(?:-([A-Za-z]+))?$`)
 
 	for i, arg := range args {
@@ -236,7 +238,7 @@ func lookup(args []string) {
 		}
 		hints.Bad = strings.ToUpper(matches[3])
 
-		for _, word := range words {
+		for _, word := range small {
 			if matchesHints(word, hints) {
 				fmt.Println(word)
 			}
@@ -249,6 +251,12 @@ func lookup(args []string) {
 }
 
 func distribution(word string) {
+	word = strings.ToUpper(word)
+	if len(word) != 5 {
+		fmt.Printf("invalid argument %q\n", word)
+		return
+	}
+
 	dist := make(map[int64]int64)
 
 	counter := MakeCounter()
