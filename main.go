@@ -95,7 +95,7 @@ func filter() {
 }
 
 func lookup(args []string) {
-	words := readLines(filepath.Join(filteredDir, *dictFlag))
+	words := loadDict()
 	argRegex := regexp.MustCompile(`^([_A-Za-z]{5})(?:\+([A-Za-z]+))?(?:-([A-Za-z]+))?$`)
 
 	for i, arg := range args {
@@ -124,7 +124,7 @@ func lookup(args []string) {
 }
 
 func distribution(word string) {
-	words := readLines(filepath.Join(filteredDir, *dictFlag))
+	words := loadDict()
 	cache := make(map[Hints]int64)
 	dist := make(map[int64]int64)
 	for _, target := range words {
@@ -192,7 +192,7 @@ type Record struct {
 }
 
 func evaluate() {
-	words := readLines(filepath.Join(filteredDir, *dictFlag))
+	words := loadDict()
 
 	inputs := make(chan Record, 64)
 	outputs := make(chan Record, 64)
@@ -352,6 +352,12 @@ func matchesHints(word string, hints Hints) bool {
 	}
 
 	return true
+}
+
+func loadDict() []string {
+	// Here we assume that the file is well-formed and each line
+	// contains one word consisting of five uppercase letters.
+	return readLines(filepath.Join(filteredDir, *dictFlag))
 }
 
 func readLines(filename string) []string {
