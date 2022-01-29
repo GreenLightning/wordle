@@ -137,7 +137,7 @@ func matchesHints(word string, hints Hints) bool {
 	}
 
 	for _, h := range hints.Moving {
-		if word[h.Index] == h.Letter {
+		if h.Index != 255 && word[h.Index] == h.Letter {
 			return false
 		}
 		found := false
@@ -216,7 +216,7 @@ func main() {
 }
 
 func lookup(args []string) {
-	argRegex := regexp.MustCompile(`^([_A-Za-z]{5})(?:\+((?:[A-Za-z][1-5])+))?(?:-([A-Za-z]+))?$`)
+	argRegex := regexp.MustCompile(`^([_A-Za-z]{5})(?:\+((?:[A-Za-z][1-5]?)+))?(?:-([A-Za-z]+))?$`)
 
 	for i, arg := range args {
 		matches := argRegex.FindStringSubmatch(arg)
@@ -236,11 +236,15 @@ func lookup(args []string) {
 			}
 		}
 		moving := strings.ToUpper(matches[2])
-		for i := 0; i < len(moving); i += 2 {
-			hints.Moving = append(hints.Moving, Hint{
-				Letter: moving[i],
-				Index:  moving[i+1] - '1',
-			})
+		for i := 0; i < len(moving); i++ {
+			hint := Hint{Letter: moving[i]}
+			if i + 1 < len(moving) && moving[i+1] >= '0' && moving[i+1] <= '9' {
+				hint.Index =  moving[i+1] - '1'
+				i++
+			} else {
+				hint.Index = 255
+			}
+			hints.Moving = append(hints.Moving, hint)
 		}
 		hints.Bad = strings.ToUpper(matches[3])
 
