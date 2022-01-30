@@ -60,14 +60,14 @@ func lookup(arg string) error {
 	}
 	moving := strings.ToUpper(matches[2])
 	for i := 0; i < len(moving); i++ {
-		hint := Hint{Letter: moving[i]}
+		hints.Required = hints.Required + moving[i:i+1]
 		if i+1 < len(moving) && moving[i+1] >= '0' && moving[i+1] <= '9' {
-			hint.Index = moving[i+1] - '1'
+			hints.Moving = append(hints.Moving, Hint{
+				Letter: moving[i],
+				Index: moving[i+1] - '1',
+			})
 			i++
-		} else {
-			hint.Index = 255
 		}
-		hints.Moving = append(hints.Moving, hint)
 	}
 	hints.Bad = strings.ToUpper(matches[3])
 
