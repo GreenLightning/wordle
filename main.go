@@ -40,7 +40,7 @@ func main() {
 	}
 }
 
-var argRegex = regexp.MustCompile(`^([_A-Za-z]{5})(?:\+((?:[A-Za-z][1-5]?)+))?(?:-([A-Za-z]+))?$`)
+var argRegex = regexp.MustCompile(`^([_A-Za-z]{5})(?:\+((?:[A-Za-z][1-5]*)+))?(?:-([A-Za-z]+))?$`)
 
 func lookup(arg string) error {
 	matches := argRegex.FindStringSubmatch(arg)
@@ -58,18 +58,24 @@ func lookup(arg string) error {
 			})
 		}
 	}
-	moving := strings.ToUpper(matches[2])
-	for i := 0; i < len(moving); i++ {
-		hints.Required = hints.Required + moving[i:i+1]
-		if i+1 < len(moving) && moving[i+1] >= '0' && moving[i+1] <= '9' {
+
+	good := strings.ToUpper(matches[2])
+	for i := 0; i < len(good); i++ {
+		hints.Required += good[i : i+1]
+		for letter := good[i]; i+1 < len(good) && good[i+1] >= '0' && good[i+1] <= '9'; i++ {
 			hints.Moving = append(hints.Moving, Hint{
-				Letter: moving[i],
-				Index: moving[i+1] - '1',
+				Letter: letter,
+				Index:  good[i+1] - '1',
 			})
-			i++
 		}
 	}
-	hints.Bad = strings.ToUpper(matches[3])
+
+	bad := strings.ToUpper(matches[3])
+	for i := 0; i < len(bad); i++ {
+		if !strings.Contains(hints.Bad, bad[i:i+1]) {
+			hints.Bad += bad[i : i+1]
+		}
+	}
 
 	for _, word := range small {
 		if matchesHints(word, hints) {
