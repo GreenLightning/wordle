@@ -62,10 +62,10 @@ func (hints *Hints) key() string {
 }
 
 func calculateHints(target, word string) (hints Hints) {
-	correct := make([]bool, len(target))
-	used := make([]bool, len(target))
+	var correct [5]bool
+	var used [5]bool
 
-	for i := range target {
+	for i := 0; i < 5; i++ {
 		if word[i] == target[i] {
 			correct[i] = true
 			used[i] = true
@@ -76,29 +76,32 @@ func calculateHints(target, word string) (hints Hints) {
 		}
 	}
 
-	var required []byte
-	for i := range target {
+	var required [5]byte
+	var requiredCount int
+	for i := 0; i < 5; i++ {
 		if correct[i] {
 			continue
 		}
-		for j := range target {
+		for j := 0; j < 5; j++ {
 			if !used[j] && word[i] == target[j] {
 				used[j] = true
+				required[requiredCount] = word[i]
+				requiredCount++
 				hints.Moving = append(hints.Moving, Hint{
 					Letter: word[i],
 					Index:  byte(i),
 				})
-				required = append(required, word[i])
 				break
 			}
 		}
 	}
 
-	var bad []byte
-	for i := range word {
+	var bad [5]byte
+	var badCount int
+	for i := 0; i < 5; i++ {
 		exists := false
-		for _, h := range hints.Fixed {
-			if word[i] == h.Letter {
+		for j := 0; j < len(hints.Fixed); j++ {
+			if word[i] == hints.Fixed[j].Letter {
 				exists = true
 				break
 			}
@@ -106,8 +109,8 @@ func calculateHints(target, word string) (hints Hints) {
 		if exists {
 			continue
 		}
-		for _, h := range hints.Moving {
-			if word[i] == h.Letter {
+		for j := 0; j < len(hints.Moving); j++ {
+			if word[i] == hints.Moving[j].Letter {
 				exists = true
 				break
 			}
@@ -115,35 +118,36 @@ func calculateHints(target, word string) (hints Hints) {
 		if exists {
 			continue
 		}
-		bad = append(bad, word[i])
+		bad[badCount] = word[i]
+		badCount++
 	}
 
-	hints.Required = string(required)
-	hints.Bad = string(bad)
+	hints.Required = string(required[:requiredCount])
+	hints.Bad = string(bad[:badCount])
 	return
 }
 
 func matchesHints(word string, hints Hints) bool {
-	for _, h := range hints.Fixed {
-		if word[h.Index] != h.Letter {
+	for i := 0; i < len(hints.Fixed); i++ {
+		if word[hints.Fixed[i].Index] != hints.Fixed[i].Letter {
 			return false
 		}
 	}
 
-	for _, h := range hints.Moving {
-		if word[h.Index] == h.Letter {
+	for i := 0; i < len(hints.Moving); i++ {
+		if word[hints.Moving[i].Index] == hints.Moving[i].Letter {
 			return false
 		}
 	}
 
-	used := make([]bool, len(word))
-	for _, h := range hints.Fixed {
-		used[h.Index] = true
+	var used [5]bool
+	for i := 0; i < len(hints.Fixed); i++ {
+		used[hints.Fixed[i].Index] = true
 	}
 
 	for i := 0; i < len(hints.Required); i++ {
 		found := false
-		for j := 0; j < len(word); j++ {
+		for j := 0; j < 5; j++ {
 			if !used[j] && word[j] == hints.Required[i] {
 				used[j] = true
 				found = true
@@ -156,7 +160,7 @@ func matchesHints(word string, hints Hints) bool {
 	}
 
 	for i := 0; i < len(hints.Bad); i++ {
-		for j := 0; j < len(word); j++ {
+		for j := 0; j < 5; j++ {
 			if !used[j] && word[j] == hints.Bad[i] {
 				return false
 			}
