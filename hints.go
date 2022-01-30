@@ -62,12 +62,14 @@ func (hints *Hints) key() string {
 }
 
 func calculateHints(target, word string) (hints Hints) {
-	var correct [5]bool
-	var used [5]bool
+	var (
+		good [5]bool // refers to word
+		used [5]bool // refers to target
+	)
 
 	for i := 0; i < 5; i++ {
 		if word[i] == target[i] {
-			correct[i] = true
+			good[i] = true
 			used[i] = true
 			hints.Fixed = append(hints.Fixed, Hint{
 				Letter: word[i],
@@ -79,11 +81,12 @@ func calculateHints(target, word string) (hints Hints) {
 	var required [5]byte
 	var requiredCount int
 	for i := 0; i < 5; i++ {
-		if correct[i] {
+		if good[i] {
 			continue
 		}
 		for j := 0; j < 5; j++ {
 			if !used[j] && word[i] == target[j] {
+				good[i] = true
 				used[j] = true
 				required[requiredCount] = word[i]
 				requiredCount++
@@ -98,27 +101,18 @@ func calculateHints(target, word string) (hints Hints) {
 
 	var bad [5]byte
 	var badCount int
+badLoop:
 	for i := 0; i < 5; i++ {
-		exists := false
-		for j := 0; j < len(hints.Fixed); j++ {
-			if word[i] == hints.Fixed[j].Letter {
-				exists = true
-				break
-			}
-		}
-		if exists {
+		if good[i] {
 			continue
 		}
-		for j := 0; j < len(hints.Moving); j++ {
-			if word[i] == hints.Moving[j].Letter {
-				exists = true
-				break
+		char := word[i]
+		for j := 0; j < badCount; j++ {
+			if bad[j] == char {
+				continue badLoop
 			}
 		}
-		if exists {
-			continue
-		}
-		bad[badCount] = word[i]
+		bad[badCount] = char
 		badCount++
 	}
 
@@ -145,18 +139,15 @@ func matchesHints(word string, hints Hints) bool {
 		used[hints.Fixed[i].Index] = true
 	}
 
+requiredLoop:
 	for i := 0; i < len(hints.Required); i++ {
-		found := false
 		for j := 0; j < 5; j++ {
 			if !used[j] && word[j] == hints.Required[i] {
 				used[j] = true
-				found = true
-				break
+				continue requiredLoop
 			}
 		}
-		if !found {
-			return false
-		}
+		return false
 	}
 
 	for i := 0; i < len(hints.Bad); i++ {
