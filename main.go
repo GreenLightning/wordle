@@ -13,6 +13,7 @@ var deckFlag = flag.Bool("deck", false, "generate Anki deck for learning words")
 var distFlag = flag.String("dist", "", "calculate distribution for one word")
 var bestFlag = flag.Bool("best", false, "find best starting word")
 
+//go:generate go run words_organized_generator.go
 func main() {
 	flag.Parse()
 
