@@ -5,13 +5,13 @@ import (
 	"flag"
 	"fmt"
 	"os"
-	"regexp"
 	"strings"
 )
 
 var deckFlag = flag.Bool("deck", false, "generate Anki deck for learning words")
 var distFlag = flag.String("dist", "", "calculate distribution for one word")
 var bestFlag = flag.Bool("best", false, "find best starting word")
+var forFlag = flag.String("for", "", "find best word for hints")
 
 //go:generate go run words_organized_generator.go
 func main() {
@@ -22,11 +22,23 @@ func main() {
 	}
 
 	if *distFlag != "" {
-		calculateDistribution(*distFlag)
+		err := calculateDistribution(*distFlag)
+		if err != nil {
+			fmt.Println(err)
+		}
 	}
 
 	if *bestFlag {
 		findBest()
+	}
+
+	if *forFlag != "" {
+		hints, err := parseHints(*forFlag)
+		if err != nil {
+			fmt.Println(err)
+		} else {
+			findBestFor(hints)
+		}
 	}
 
 	for i, arg := range flag.Args() {
@@ -41,41 +53,10 @@ func main() {
 	}
 }
 
-var argRegex = regexp.MustCompile(`^([_A-Za-z]{5})(?:\+((?:[A-Za-z][1-5]*)+))?(?:-([A-Za-z]+))?$`)
-
 func lookup(arg string) error {
-	matches := argRegex.FindStringSubmatch(arg)
-	if matches == nil {
-		return fmt.Errorf("invalid argument %q\n", arg)
-	}
-
-	var hints Hints
-	fixed := strings.ToUpper(matches[1])
-	for i := range fixed {
-		if fixed[i] != '_' {
-			hints.Fixed = append(hints.Fixed, Hint{
-				Letter: fixed[i],
-				Index:  byte(i),
-			})
-		}
-	}
-
-	good := strings.ToUpper(matches[2])
-	for i := 0; i < len(good); i++ {
-		hints.Required += good[i : i+1]
-		for letter := good[i]; i+1 < len(good) && good[i+1] >= '0' && good[i+1] <= '9'; i++ {
-			hints.Moving = append(hints.Moving, Hint{
-				Letter: letter,
-				Index:  good[i+1] - '1',
-			})
-		}
-	}
-
-	bad := strings.ToUpper(matches[3])
-	for i := 0; i < len(bad); i++ {
-		if !strings.Contains(hints.Bad, bad[i:i+1]) {
-			hints.Bad += bad[i : i+1]
-		}
+	hints, err := parseHints(arg)
+	if err != nil {
+		return err
 	}
 
 	for _, word := range small {

@@ -2,15 +2,24 @@ package main
 
 import (
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
 
-func calculateDistribution(word string) {
-	word = strings.ToUpper(word)
-	if len(word) != 5 {
-		fmt.Printf("invalid argument %q\n", word)
-		return
+var wordRegex = regexp.MustCompile(`^[A-Za-z]{5}$`)
+
+func parseWord(text string) (string, error) {
+	if !wordRegex.MatchString(text) {
+		return "", fmt.Errorf("invalid argument %q\n", text)
+	}
+	return strings.ToUpper(text), nil
+}
+
+func calculateDistribution(input string) error {
+	word, err := parseWord(input)
+	if err != nil {
+		return err
 	}
 
 	dist := make(map[int64]int64)
@@ -62,4 +71,6 @@ func calculateDistribution(word string) {
 		barLength := int(count / bucketScale)
 		fmt.Printf("%*d %s\n", formatLength-1, int64(i)*bucketSize, strings.Repeat("*", barLength))
 	}
+
+	return nil
 }

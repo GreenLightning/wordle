@@ -1,5 +1,12 @@
 package main
 
+import (
+	"fmt"
+	"regexp"
+	"sort"
+	"strings"
+)
+
 // Hints is a different representation of the hints from one or more guesses.
 //
 // A green letter generates a fixed hint.
@@ -42,6 +49,25 @@ type Hint struct {
 	Index  byte
 }
 
+func (hints Hints) String() string {
+	var s []byte
+	s = append(s, '!')
+	for _, h := range hints.Fixed {
+		s = append(s, h.Letter)
+		s = append(s, '1'+h.Index)
+	}
+	s = append(s, '?')
+	for _, h := range hints.Moving {
+		s = append(s, h.Letter)
+		s = append(s, '1'+h.Index)
+	}
+	s = append(s, '+')
+	s = append(s, hints.Required...)
+	s = append(s, '-')
+	s = append(s, hints.Bad...)
+	return string(s)
+}
+
 // Calculates a reprentation that can be used as a map key.
 func (hints *Hints) key() string {
 	key := make([]byte, 0, 2*len(hints.Fixed)+1+2*len(hints.Moving)+1+len(hints.Required)+1+len(hints.Bad))
@@ -59,6 +85,46 @@ func (hints *Hints) key() string {
 	key = append(key, '|')
 	key = append(key, hints.Bad...)
 	return string(key)
+}
+
+var hintRegex = regexp.MustCompile(`^([_A-Za-z]{5})(?:\+((?:[A-Za-z][1-5]*)+))?(?:-([A-Za-z]+))?$`)
+
+func parseHints(text string) (hints Hints, err error) {
+	matches := hintRegex.FindStringSubmatch(text)
+	if matches == nil {
+		err = fmt.Errorf("invalid argument %q\n", text)
+		return
+	}
+
+	fixed := strings.ToUpper(matches[1])
+	for i := range fixed {
+		if fixed[i] != '_' {
+			hints.Fixed = append(hints.Fixed, Hint{
+				Letter: fixed[i],
+				Index:  byte(i),
+			})
+		}
+	}
+
+	good := strings.ToUpper(matches[2])
+	for i := 0; i < len(good); i++ {
+		hints.Required += good[i : i+1]
+		for letter := good[i]; i+1 < len(good) && good[i+1] >= '0' && good[i+1] <= '9'; i++ {
+			hints.Moving = append(hints.Moving, Hint{
+				Letter: letter,
+				Index:  good[i+1] - '1',
+			})
+		}
+	}
+
+	bad := strings.ToUpper(matches[3])
+	for i := 0; i < len(bad); i++ {
+		if !strings.Contains(hints.Bad, bad[i:i+1]) {
+			hints.Bad += bad[i : i+1]
+		}
+	}
+
+	return
 }
 
 func calculateHints(target, word string) (hints Hints) {
@@ -159,4 +225,108 @@ requiredLoop:
 	}
 
 	return true
+}
+
+func mergeHints(a Hints, b Hints) (r Hints) {
+	var fixed [5]Hint
+	for i := 0; i < len(a.Fixed); i++ {
+		fixed[a.Fixed[i].Index] = a.Fixed[i]
+	}
+	for i := 0; i < len(b.Fixed); i++ {
+		fixed[b.Fixed[i].Index] = b.Fixed[i]
+	}
+
+	var fixedCount int
+	for i := 0; i < 5; i++ {
+		if fixed[i].Letter != 0 {
+			fixedCount++
+		}
+	}
+
+	r.Fixed = make([]Hint, 0, fixedCount)
+	for i := 0; i < 5; i++ {
+		if fixed[i].Letter != 0 {
+			r.Fixed = append(r.Fixed, fixed[i])
+		}
+	}
+
+	r.Moving = make([]Hint, len(a.Moving))
+	copy(r.Moving, a.Moving)
+movingLoop:
+	for i := 0; i < len(b.Moving); i++ {
+		for j := 0; j < len(a.Moving); j++ {
+			if a.Moving[j] == b.Moving[i] {
+				continue movingLoop
+			}
+		}
+		r.Moving = append(r.Moving, b.Moving[i])
+	}
+
+	sort.Slice(r.Moving, func(i, j int) bool {
+		if r.Moving[i].Index != r.Moving[j].Index {
+			return r.Moving[i].Index < r.Moving[j].Index
+		}
+		return r.Moving[i].Letter < r.Moving[j].Letter
+	})
+
+	var required []byte
+	for letter := byte('A'); letter <= byte('Z'); letter++ {
+		var aCount int
+		for i := 0; i < len(a.Fixed); i++ {
+			if a.Fixed[i].Letter == letter {
+				aCount++
+			}
+		}
+		for i := 0; i < len(a.Required); i++ {
+			if a.Required[i] == letter {
+				aCount++
+			}
+		}
+
+		var bCount int
+		for i := 0; i < len(b.Fixed); i++ {
+			if b.Fixed[i].Letter == letter {
+				bCount++
+			}
+		}
+		for i := 0; i < len(b.Required); i++ {
+			if b.Required[i] == letter {
+				bCount++
+			}
+		}
+
+		var count = aCount
+		if bCount > aCount {
+			count = bCount
+		}
+
+		for i := 0; i < len(r.Fixed); i++ {
+			if r.Fixed[i].Letter == letter {
+				count--
+			}
+		}
+
+		for i := 0; i < count; i++ {
+			required = append(required, letter)
+		}
+	}
+
+	bad := []byte(a.Bad)
+badLoop:
+	for i := 0; i < len(b.Bad); i++ {
+		for j := 0; j < len(a.Bad); j++ {
+			if a.Bad[j] == b.Bad[i] {
+				continue badLoop
+			}
+		}
+		bad = append(bad, b.Bad[i])
+	}
+
+	sort.Slice(bad, func(i, j int) bool {
+		return bad[i] < bad[j]
+	})
+
+	r.Required = string(required)
+	r.Bad = string(bad)
+	return
 }
