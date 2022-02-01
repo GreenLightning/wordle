@@ -212,12 +212,21 @@ func findBest2() {
 	length := len(fmt.Sprint(recordCount))
 	fmt.Printf("\r%s\r", strings.Repeat(" ", 2*length+1))
 
-	sort.SliceStable(records, func(i, j int) bool {
-		return records[i].Score < records[j].Score
+	best := make([]Record2, 20)
+	copy(best, records)
+	sort.SliceStable(best, func(i, j int) bool {
+		return best[i].Score < best[j].Score
 	})
+	for i := len(best); i < len(records); i++ {
+		if records[i].Score < best[len(best)-1].Score {
+			best[len(best)-1] = records[i]
+			sort.SliceStable(best, func(i, j int) bool {
+				return best[i].Score < best[j].Score
+			})
+		}
+	}
 
-	for i := 0; i < len(records) && i < 20; i++ {
-		record := records[i]
+	for _, record := range best {
 		fmt.Printf("%s,%s %.3f%%\n", record.WordA, record.WordB, float64(100*record.Score)/float64(len(small)*len(small)))
 	}
 }
