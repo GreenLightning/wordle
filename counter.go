@@ -14,6 +14,8 @@ func (counter *Counter) Reset() {
 	counter.cache = make(map[string]int64)
 }
 
+// CountMatches returns how many words in the small word list (all possible
+// target words) match the given hints.
 func (counter *Counter) CountMatches(hints Hints) int64 {
 	key := hints.key()
 	if count, ok := counter.cache[key]; ok {

@@ -22,14 +22,18 @@ func calculateDistribution(input string) error {
 		return err
 	}
 
+	score := int64(0)
 	dist := make(map[int64]int64)
 
 	counter := MakeCounter()
 	for _, target := range small {
 		hints := calculateHints(target, word)
 		count := counter.CountMatches(hints)
+		score += count
 		dist[count]++
 	}
+
+	fmt.Printf("%s %.3f%%\n", word, float64(100*score)/float64(len(small)*len(small)))
 
 	keys := make([]int64, 0, len(dist))
 	for key := range dist {
