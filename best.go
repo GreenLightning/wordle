@@ -150,22 +150,30 @@ func findBestFor(hints Hints) {
 }
 
 type Record2 struct {
-	Index     int
-	Words     []string
-	Score     int64
+	Index int
+	WordA string
+	WordB string
+	Score int64
 }
 
 func findBest2() {
 	inputs := make(chan Record2, 64)
 	outputs := make(chan Record2, 64)
 
+	var recordCount int
+	for i := 0; i < len(small); i++ {
+		for j := i + 1; j < len(small); j++ {
+			recordCount++
+		}
+	}
 	go func() {
 		var index int
-		for _, a := range small {
-			for _, b := range small {
+		for i := 0; i < len(small); i++ {
+			for j := i + 1; j < len(small); j++ {
 				inputs <- Record2{
 					Index: index,
-					Words: []string{a, b},
+					WordA: small[i],
+					WordB: small[j],
 				}
 				index++
 			}
@@ -178,13 +186,13 @@ func findBest2() {
 			counter := MakeCounter()
 			last := ""
 			for record := range inputs {
-				if record.Words[0] != last {
-					last = record.Words[0]
+				if record.WordA != last {
+					last = record.WordA
 					counter.Reset()
 				}
 				for _, target := range small {
-					a := calculateHints(target, record.Words[0])
-					b := calculateHints(target, record.Words[1])
+					a := calculateHints(target, record.WordA)
+					b := calculateHints(target, record.WordB)
 					hints := mergeHints(a, b)
 					count := counter.CountMatches(hints)
 					record.Score += count
@@ -194,7 +202,6 @@ func findBest2() {
 		}()
 	}
 
-	recordCount := len(small) * len(small)
 	records := make([]Record2, recordCount)
 	for i := range records {
 		record := <-outputs
@@ -211,6 +218,6 @@ func findBest2() {
 
 	for i := 0; i < len(records) && i < 20; i++ {
 		record := records[i]
-		fmt.Printf("%s %.3f%%\n", strings.Join(record.Words, ","), float64(100*record.Score)/float64(len(small)*len(small)))
+		fmt.Printf("%s,%s %.3f%%\n", record.WordA, record.WordB, float64(100*record.Score)/float64(len(small)*len(small)))
 	}
 }
