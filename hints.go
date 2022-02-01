@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"regexp"
-	"sort"
 	"strings"
 )
 
@@ -262,15 +261,42 @@ movingLoop:
 		r.Moving = append(r.Moving, b.Moving[i])
 	}
 
-	sort.Slice(r.Moving, func(i, j int) bool {
-		if r.Moving[i].Index != r.Moving[j].Index {
-			return r.Moving[i].Index < r.Moving[j].Index
+	{
+		moving := r.Moving
+		less := func(i, j int) bool {
+			if moving[i].Index != moving[j].Index {
+				return moving[i].Index < moving[j].Index
+			}
+			return moving[i].Letter < moving[j].Letter
 		}
-		return r.Moving[i].Letter < r.Moving[j].Letter
-	})
+		for i := 0; i < len(moving); i++ {
+			best := i
+			for j := i + 1; j < len(moving); j++ {
+				if less(j, best) {
+					best = j
+				}
+			}
+			if best != i {
+				moving[i], moving[best] = moving[best], moving[i]
+			}
+		}
+		r.Moving = moving
+	}
+
+	var letters ['Z'+1]bool
+	for i := 0; i < len(a.Required); i++ {
+		letters[a.Required[i]] = true
+	}
+	for i := 0; i < len(b.Required); i++ {
+		letters[b.Required[i]] = true
+	}
 
 	var required []byte
 	for letter := byte('A'); letter <= byte('Z'); letter++ {
+		if !letters[letter] {
+			continue
+		}
+
 		var aCount int
 		for i := 0; i < len(a.Fixed); i++ {
 			if a.Fixed[i].Letter == letter {
@@ -322,9 +348,19 @@ badLoop:
 		bad = append(bad, b.Bad[i])
 	}
 
-	sort.Slice(bad, func(i, j int) bool {
-		return bad[i] < bad[j]
-	})
+	{
+		for i := 0; i < len(bad); i++ {
+			best := i
+			for j := i + 1; j < len(bad); j++ {
+				if bad[j] < bad[best] {
+					best = j
+				}
+			}
+			if best != i {
+				bad[i], bad[best] = bad[best], bad[i]
+			}
+		}
+	}
 
 	r.Required = string(required)
 	r.Bad = string(bad)
