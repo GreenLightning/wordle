@@ -148,3 +148,69 @@ func findBestFor(hints Hints) {
 		fmt.Printf("%s %.3f%%\n", record.Word, float64(100*record.Score)/float64(len(list)*len(list)))
 	}
 }
+
+type Record2 struct {
+	Index     int
+	Words     []string
+	Score     int64
+}
+
+func findBest2() {
+	inputs := make(chan Record2, 64)
+	outputs := make(chan Record2, 64)
+
+	go func() {
+		var index int
+		for _, a := range small {
+			for _, b := range small {
+				inputs <- Record2{
+					Index: index,
+					Words: []string{a, b},
+				}
+				index++
+			}
+		}
+		close(inputs)
+	}()
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go func() {
+			counter := MakeCounter()
+			last := ""
+			for record := range inputs {
+				if record.Words[0] != last {
+					last = record.Words[0]
+					counter.Reset()
+				}
+				for _, target := range small {
+					a := calculateHints(target, record.Words[0])
+					b := calculateHints(target, record.Words[1])
+					hints := mergeHints(a, b)
+					count := counter.CountMatches(hints)
+					record.Score += count
+				}
+				outputs <- record
+			}
+		}()
+	}
+
+	recordCount := len(small) * len(small)
+	records := make([]Record2, recordCount)
+	for i := range records {
+		record := <-outputs
+		records[record.Index] = record
+		fmt.Printf("\r%d/%d", i+1, recordCount)
+	}
+
+	length := len(fmt.Sprint(recordCount))
+	fmt.Printf("\r%s\r", strings.Repeat(" ", 2*length+1))
+
+	sort.SliceStable(records, func(i, j int) bool {
+		return records[i].Score < records[j].Score
+	})
+
+	for i := 0; i < len(records) && i < 20; i++ {
+		record := records[i]
+		fmt.Printf("%s %.3f%%\n", strings.Join(record.Words, ","), float64(100*record.Score)/float64(len(small)*len(small)))
+	}
+}
